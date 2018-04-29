@@ -1,0 +1,101 @@
+<tool id="sigqc" name="sigQC"  version='0.1.14'>
+    <macros>
+        <import>macros.xml</import>
+    </macros>
+    <description>Gene signature quality control</description>
+    <token name="@VERSION@">0.1.14</token>
+
+    <requirements>
+            <requirement type="package" version="@VERSION@">r-sigqc</requirement>
+    </requirements>
+
+    <command detect_errors="exit_code"><![CDATA[
+        cat '$script' &&
+        Rscript '$script'
+    ]]></command>
+    <configfiles>
+         <configfile name="script"><![CDATA[
+            @R_INIT@
+            ## Import library
+            library("sigQC")
+            dir.create('out_dir')
+            mRNA_datasets <- list()
+            gene_sigs_list <- list()
+            origins <- c()
+            thresholds <- c()
+
+
+
+            #for $i, $s in enumerate( $mRNA_datasets )
+                mRNA_datasets[['$s.mRNA_dataset_name']] <- data.matrix(read.table('$s.mRNA_data_file',sep='\t',header=T, stringsAsFactors=F))
+                #if $s.adv.origin == ''
+                    origins <- NULL
+                #else
+                    origins <- c(origins,as.character('$s.adv.origin'))
+                #end if
+
+                #if $s.adv.expr_thresh == ''
+                    thresholds <- c(thresholds,median(mRNA_datasets[['$s.mRNA_dataset_name']],na.rm=T))
+                #else
+                    thresholds <- c(thresholds,'$s.adv.expr_thresh')
+                #end if
+            #end for
+
+            #for $i, $s in enumerate( $gene_sigs )
+                gene_sigs_list[['$s.sig_name']] <-as.matrix( as.character( as.matrix(read.table('$s.gene_sig_file',sep='\n',header=F, stringsAsFactors=F)) ))
+                print(gene_sigs_list[['$s.sig_name']])
+            #end for
+
+            #if $neg_ctrl.doNegativeControl
+                doNegCtrl <- T
+               num_resamples <- as.numeric('$neg_ctrl.numResampling')
+            #else
+                doNegCtrl <- F
+                num_resamples <- 50
+            #end if
+
+            make_all_plots(gene_sigs_list, mRNA_datasets, names_sigs = NULL,
+                names_datasets = NULL, covariates = NULL, thresholds = thresholds,
+                out_dir = 'out_dir', showResults = FALSE, origin = origins,
+                doNegativeControl = doNegCtrl, numResampling = num_resamples)
+
+            zip(zipfile='output',files='out_dir')
+        ]]></configfile>
+    </configfiles>
+    <inputs>
+
+        <repeat name='mRNA_datasets' title='Gene expression datasets'>
+            <param type="data" name="mRNA_data_file" format="tabular"  label= "Expression dataset" />
+            <param name="mRNA_dataset_name" size="30" type="text" value="Dataset name" label="Name of dataset"/>
+            <section name="adv" title="Advanced Options" expanded="false">
+                <param name="expr_thresh" type="float" value = '' label="Expression threshold" optional='true'/>
+                <param name='origin' type='integer' value = '' label='Origin of dataset' optional='true' />
+                <!-- <param name='covariates' type='data' format='tabular' label='Covariates' optional='true'/>  -->
+            </section>
+        </repeat>
+
+        <repeat name='gene_sigs' title='Gene signature information'>
+            <param type="data" name="gene_sig_file" format="tabular"  label= "lists of genes in each signature" />
+            <param name="sig_name" size="30" type="text" value="signature name" label="Name of gene signature"/>
+        </repeat>
+
+
+        <!-- <param type="data" name="expr_mats" format="tabular" multiple="true" label= "Datasets on which signatures will be tested" /> -->
+
+
+        <conditional name="neg_ctrl">
+            <param name="doNegativeControl" type="boolean" checked="true" label="Do a negative control" />
+            <when value="true">
+                <param name="numResampling" type="integer" value = "50" label="Number of resamplings: " min="10" />
+            </when> 
+        </conditional>
+
+    </inputs>
+    <outputs>
+        <data name='output_file' format='zip'  from_work_dir="output.zip" />
+
+    </outputs>
+    <help><![CDATA[
+        TODO: Fill in help. 
+    ]]></help>
+</tool>
