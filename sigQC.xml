@@ -16,24 +16,19 @@
     <configfiles>
          <configfile name="script"><![CDATA[
             @R_INIT@
+            @R_Function_Fix@
             ## Import library
             library("sigQC")
+            library("grid")
             dir.create('out_dir')
             mRNA_datasets <- list()
             gene_sigs_list <- list()
-            origins <- c()
             thresholds <- c()
-
-
+            options(bitmapType='cairo')
 
             #for $i, $s in enumerate( $mRNA_datasets )
                 mRNA_datasets[['$s.mRNA_dataset_name']] <- data.matrix(read.table('$s.mRNA_data_file',sep='\t',header=T, stringsAsFactors=F))
-                #if $s.adv.origin == ''
-                    origins <- NULL
-                #else
-                    origins <- c(origins,as.character('$s.adv.origin'))
-                #end if
-
+               
                 #if $s.adv.expr_thresh == ''
                     thresholds <- c(thresholds,median(mRNA_datasets[['$s.mRNA_dataset_name']],na.rm=T))
                 #else
@@ -43,7 +38,6 @@
 
             #for $i, $s in enumerate( $gene_sigs )
                 gene_sigs_list[['$s.sig_name']] <-as.matrix( as.character( as.matrix(read.table('$s.gene_sig_file',sep='\n',header=F, stringsAsFactors=F)) ))
-                print(gene_sigs_list[['$s.sig_name']])
             #end for
 
             #if $neg_ctrl.doNegativeControl
@@ -55,9 +49,12 @@
             #end if
 
             make_all_plots(gene_sigs_list, mRNA_datasets, names_sigs = NULL,
-                names_datasets = NULL, covariates = NULL, thresholds = thresholds,
-                out_dir = 'out_dir', showResults = FALSE, origin = origins,
-                doNegativeControl = doNegCtrl, numResampling = num_resamples)
+               names_datasets = NULL, covariates = NULL, thresholds = thresholds,
+              out_dir = 'out_dir', showResults = F, origin = NULL,
+              doNegativeControl = doNegCtrl, numResampling = num_resamples)
+
+            eval_compactness_loc(gene_sigs_list, names(gene_sigs_list), mRNA_datasets, names(mRNA_datasets),out_dir = "out_dir", file = NULL, showResults = FALSE, radar_plot_values=NULL, 
+                logged = T, origin = NULL)
 
             zip(zipfile='output',files='out_dir')
         ]]></configfile>
@@ -65,18 +62,16 @@
     <inputs>
 
         <repeat name='mRNA_datasets' title='Gene expression datasets'>
-            <param type="data" name="mRNA_data_file" format="tabular"  label= "Expression dataset" />
-            <param name="mRNA_dataset_name" size="30" type="text" value="Dataset name" label="Name of dataset"/>
+            <param type="data" name="mRNA_data_file" format="tabular"  label= "Expression dataset" help='Data should be preprocessed, with rows as genes and columns as sample IDs. Headers are expected. Data should be tab-separated text file.'/>
+            <param name="mRNA_dataset_name" size="30" type="text" value="Dataset name" label="Name of dataset" help='Dataset names must be unique.'/>
             <section name="adv" title="Advanced Options" expanded="false">
-                <param name="expr_thresh" type="float" value = '' label="Expression threshold" optional='true'/>
-                <param name='origin' type='integer' value = '' label='Origin of dataset' optional='true' />
-                <!-- <param name='covariates' type='data' format='tabular' label='Covariates' optional='true'/>  -->
-            </section>
+                <param name="expr_thresh" type="float" value = '' label="Expression threshold" optional='true' help = 'This is for determining how many genes of a signature are above an expression threshold. If no value is inputted, default is set to the median expression of all genes in the provided dataset.'/>
+             </section>
         </repeat>
 
-        <repeat name='gene_sigs' title='Gene signature information'>
-            <param type="data" name="gene_sig_file" format="tabular"  label= "lists of genes in each signature" />
-            <param name="sig_name" size="30" type="text" value="signature name" label="Name of gene signature"/>
+        <repeat name='gene_sigs' title='Gene signature files'>
+            <param type="data" name="gene_sig_file" format="tabular"  label= "Lists of genes in signature" help='Genes should be annotated using same convention as rows of expression matrices, and should be loaded into a text file, one per line with no header.'/>
+            <param name="sig_name" size="30" type="text" value="signature name" label="Name of gene signature" help='Signature names must be unique.'/>
         </repeat>
 
 
@@ -84,9 +79,9 @@
 
 
         <conditional name="neg_ctrl">
-            <param name="doNegativeControl" type="boolean" checked="true" label="Do a negative control" />
+            <param name="doNegativeControl" type="boolean" checked="true" label="Do a negative control?" help='For bootstrap resampling to determine metric significance.' />
             <when value="true">
-                <param name="numResampling" type="integer" value = "50" label="Number of resamplings: " min="10" />
+                <param name="numResampling" type="integer" value = "50" label="Number of resamplings: " min="10" help='Minimum value is 10; must be an integer.'/>
             </when> 
         </conditional>
 
@@ -95,7 +90,35 @@
         <data name='output_file' format='zip'  from_work_dir="output.zip" />
 
     </outputs>
+    <test>
+        <repeat name='mRNA_datasets'>
+            <param  name="mRNA_data_file_1" value='random_mRNA_dataset1.txt'/>
+             <param name="mRNA_dataset_name" value='random_dataset' />
+        </repeat>
+        <repeat name='gene_sigs'>
+        <param  name="gene_sig_file_1" value='random_gene_sig1.txt' />
+        <param name="sig_name" value='random_sig' />
+        </repeat>
+        <conditional name="neg_ctrl">
+             <param name="doNegativeControl" value='False'/>
+        </conditional>
+        <output name="output_file" file="sigQC_test_output.zip" />
+    </test>
     <help><![CDATA[
-        TODO: Fill in help. 
+        In this package, we have automated the testing of a number of quality control metrics designed to test whether a single score, such as the median or mean, is an appropriate summary for the genes’ expression in a new dataset. Furthermore, the tools in this package enable the visualization of properties of a set of genes in a specific dataset, such as expression profile, variability, correlation, and comparison of methods of standardisation and scoring metrics for wider application.
+
+        For the purposes of this package, we define the term gene signature to mean: ‘a set of genes whose co-ordinated mRNA expression pattern is representative of a biological pathway, process, or phenotype, or clinical outcome.’
+
+        The premise behind sigQC is to input primarily two things - the gene signatures and the datasets to test them upon. Once these inputs are prepared in the correct format, the make_all_plots function can be run, with settings as per user needs, generating the quality control plots needed to ascertain how each signature performs on each dataset considered.
+
+        The Galaxy version of this tool implements the core functions of the package, but for full functionality, such as inclusion of the rank product test when using multiple datasets and more advanced heatmap plotting, please use the original version. 
+
+        For a full description of how the package works, please see the CRAN vignette at: https://cran.r-project.org/web/packages/sigQC/vignettes/vignette.html
+
+        This is still in a testing phase, so please bear with any errors encountered -- feedback is appreciated. 
+
     ]]></help>
+    <citations>
+        <citation type="doi">10.1101/203729</citation>
+    </citations>
 </tool>
