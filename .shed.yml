@@ -1,0 +1,13 @@
+name: sigqc
+owner: adhawan
+categories:
+  - Statistics
+  - Visualization
+description: Gene signature quality control
+homepage_url: https://CRAN.R-project.org/package=sigQC
+long_description: |
+    In this package, we have automated the testing of a number of quality control metrics designed to test whether a single score, such as the median or mean, is an appropriate summary for the genes’ expression in a new dataset.
+
+DOI: 10.1101/203729
+remote_repository_url: https://github.com/andrewdhawan/galaxy-sigQC
+type: unrestricted
